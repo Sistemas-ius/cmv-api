@@ -6,10 +6,24 @@ exports.handler = async function(event, context) {
     if (!response.ok) throw new Error("HTTP " + response.status);
     const csv = await response.text();
 
-    // Parsear CSV
-    const lines   = csv.trim().split("\n");
-    const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
-    const rows    = lines.slice(1)
+    const lines = csv.trim().split("\n");
+
+    // Buscar fila con encabezados reales (contiene "Concurso" y "Medalla")
+    let headerIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes("Concurso") && lines[i].includes("Medalla")) {
+        headerIndex = i;
+        break;
+      }
+    }
+
+    if (headerIndex === -1) throw new Error("No se encontraron encabezados");
+
+    const headers = lines[headerIndex]
+      .split(",")
+      .map(h => h.trim().replace(/^"|"$/g, ""));
+
+    const rows = lines.slice(headerIndex + 1)
       .filter(line => line.trim())
       .map(line => {
         const vals = [];
@@ -20,17 +34,19 @@ exports.handler = async function(event, context) {
           else { cur += ch; }
         }
         vals.push(cur.trim());
-        return Object.fromEntries(headers.map((h, i) => [h, vals[i] || ""]));
+        return Object.fromEntries(
+          headers.map((h, i) => [h, (vals[i] || "").replace(/^"|"$/g, "")])
+        );
       })
-      .filter(r => Object.values(r).some(v => v));
+      .filter(r => r["Concurso"] && r["Medalla"]);
 
     return {
       statusCode: 200,
       headers: {
-        "Content-Type":                "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods":"GET",
-        "Cache-Control":               "public, max-age=300"
+        "Content-Type":                 "application/json",
+        "Access-Control-Allow-Origin":  "*",
+        "Access-Control-Allow-Methods": "GET",
+        "Cache-Control":                "public, max-age=300"
       },
       body: JSON.stringify(rows)
     };
